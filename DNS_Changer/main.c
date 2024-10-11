@@ -1,64 +1,30 @@
-#include <linux/kernel.h>
-#include <linux/init.h>
-#include <linux/module.h>
-#include <linux/proc_fs.h>
-#include <linux/uaccess.h>
+#include <stdio.h>
+#include <stdlib.h>
 
-#define PROC_NAME "dns_settings"
-#define DNS_MAX_LEN 256
-
-// Default DNS
-static char dns_settings[DNS_MAX_LEN] = "8.8.8.8";
-
-MODULE_LICENSE("GPL");
-MODULE_DESCRIPTION("DNS Settings Module");
-MODULE_AUTHOR("Mehdi");
-MODULE_VERSION("1.0.0");
-
-ssize_t proc_read(struct file *file, char __user *usr_buf, size_t count, loff_t *pos)
+void change_dns(const char *dns)
 {
-    int rv = 0;
-    char buffer[DNS_MAX_LEN];
-    static int completed = 0;
-
-    if (completed)
+    FILE *file = fopen("/etc/resolv.conf", "w");
+    if (file == NULL)
     {
-        completed = 0;
-        return 0;
+        perror("Failed to open /etc/resolv.conf");
+        exit(EXIT_FAILURE);
     }
 
-    completed = 1;
-    rv = sprintf(buffer, "%s\n", dns_settings);
-    copy_to_user(usr_buf, buffer, rv);
-
-    return rv;
+    fprintf(file, "nameserver %s\n", dns);
+    fclose(file);
 }
 
-ssize_t proc_write(struct file *file, const char __user *usr_buf, size_t count, loff_t *pos)
+int main(int argc, char *argv[])
 {
-    copy_from_user(dns_settings, usr_buf, count);
-    dns_settings[count] = '\0'; // Null-terminate the string
+    if (argc != 2)
+    {
+        fprintf(stderr, "Usage: %s <DNS_IP>\n", argv[0]);
+        return EXIT_FAILURE;
+    }
 
-    return count;
+    change_dns(argv[1]);
+
+    printf("DNS changed to %s\n", argv[1]);
+
+    return EXIT_SUCCESS;
 }
-
-static struct proc_ops proc_ops = {
-    .proc_read = proc_read,
-    .proc_write = proc_write,
-};
-
-static int __init dns_module_init(void)
-{
-    proc_create(PROC_NAME, 0666, NULL, &proc_ops);
-    printk(KERN_INFO "DNS module loaded with default DNS: %s\n", dns_settings);
-    return 0;
-}
-
-static void __exit dns_module_exit(void)
-{
-    remove_proc_entry(PROC_NAME, NULL);
-    printk(KERN_INFO "DNS module unloaded.\n");
-}
-
-module_init(dns_module_init);
-module_exit(dns_module_exit);
